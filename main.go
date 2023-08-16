@@ -176,12 +176,12 @@ func main() {
 	fmt.Println("Merging temporary files into", destination)
 	err = mergeFiles(destination, chunks)
 	if err != nil {
-		panic("ERROR: Failed to merge chunk files:", err)
+		panic(fmt.Sprintf("ERROR: Failed to merge chunk files: %s", err.Error()))
 	}
 
 	ok, err := checksumMatches(destination, download_attributes.checksum)
 	if err != nil {
-		panic("ERROR: Failed to compare checksums:", err)
+		panic(fmt.Sprintf("ERROR: Failed to compare checksums: %s", err.Error()))
 	}
 	if ok {
 		fmt.Println("Checksum passed. Download successful!")
