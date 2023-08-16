@@ -39,7 +39,7 @@ func parseEtag(etag string) (checksum string) {
 		checksum = ""
 	}
 
-  return checksum
+	return checksum
 }
 
 func getFilePropertiesFromURL(url string) (size int, checksum string, client *http.Client, err error) {
