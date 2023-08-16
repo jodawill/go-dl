@@ -69,6 +69,9 @@ func chunkWorker(connection connection, wait_group *sync.WaitGroup, progress_cha
 	defer wait_group.Done()
 	for chunk := range queue {
 		err = fetchChunk(connection, chunk, progress_channel)
+		if err != nil {
+		  panic(fmt.Sprintf("ERROR: failed to download chunk: %s", err.Error()))
+		}
 	}
 	return err
 }
