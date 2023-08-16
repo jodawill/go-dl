@@ -152,18 +152,6 @@ func initializeChunks(download_attributes attributes) (chunks []chunk) {
 		}
 		chunks = append(chunks, chunk)
 	}
-
-	//chunk_size := download_attributes.size/len(download_attributes.connections) + download_attributes.size%len(download_attributes.connections)
-	//for i, connection := range download_attributes.connections {
-	//  chunk := chunk{
-	//    connection: connection,
-	//    filename: fmt.Sprintf("%s.part", uuid.New().String()),
-	//    start: i*chunk_size,
-	//    end: (i+1)*chunk_size-1,
-	//  }
-	//  chunks = append(chunks, chunk)
-	//}
-
 	return chunks
 }
 
