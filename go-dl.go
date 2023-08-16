@@ -27,6 +27,21 @@ type connection struct {
 	url    string
 }
 
+func parseEtag(etag string) (checksum string) {
+	if strings.HasPrefix(etag, "W/") {
+		panic("ERROR: Checksum is a weak validator. Exiting because we cannot guarantee a consistent download.")
+	}
+
+	checksum = strings.Trim(etag, "\"")
+
+	re := regexp.MustCompile(`-\d+$`)
+	if re.MatchString(checksum) {
+		checksum = ""
+	}
+
+  return checksum
+}
+
 func getFilePropertiesFromURL(url string) (size int, checksum string, client *http.Client, err error) {
 	client = &http.Client{}
 	req, err := http.NewRequest("HEAD", url, nil)
@@ -40,19 +55,7 @@ func getFilePropertiesFromURL(url string) (size int, checksum string, client *ht
 	}
 	length_string := response.Header.Get("Content-Length")
 	size, _ = strconv.Atoi(length_string)
-	checksum = response.Header.Get("Etag")
-	if strings.HasPrefix(checksum, "W/") {
-		fmt.Println("ERROR: Checksum is a weak validator. Exiting because we cannot guarantee a consistent download.")
-		os.Exit(1)
-	}
-
-	checksum = strings.Trim(checksum, "\"")
-
-	re := regexp.MustCompile(`-\d+$`)
-	if re.MatchString(checksum) {
-		fmt.Println(fmt.Sprintf("WARNING: Multi-part Etag header detected. Ignoring checksum for %s", url))
-		checksum = ""
-	}
+	checksum = parseEtag(response.Header.Get("Etag"))
 
 	return size, checksum, client, err
 }
