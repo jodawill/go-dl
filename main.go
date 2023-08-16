@@ -94,16 +94,16 @@ func fetchFile(chunks []chunk, download_attributes attributes) (err error) {
 	progress_channel := make(chan int)
 	queue := make(chan chunk)
 
-	for i := 0; i < len(download_attributes.connections); i++ {
+	for _, connection := range download_attributes.connections {
 		wait_group.Add(1)
-		go chunkWorker(download_attributes.connections[i], &wait_group, progress_channel, queue)
+		go chunkWorker(connection, &wait_group, progress_channel, queue)
 	}
 
 	go writeProgressBar(download_attributes.size, &progress_wait_group, progress_channel)
 	progress_wait_group.Add(1)
 
-	for i := 0; i < len(chunks); i++ {
-		queue <- chunks[i]
+	for _, chunk := range chunks {
+		queue <- chunk
 	}
 	close(queue)
 
