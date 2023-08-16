@@ -4,5 +4,5 @@ This is a command line tool for conducting multi-source downloads in Go.
 
 ## Usage
 ```
-go run go-dl.go --dest file.dat --url https://example.com/file.dat --url https://mirror.example.com/file.dat
+go run . --dest file.dat --url https://example.com/file.dat --url https://mirror.example.com/file.dat
 ```
