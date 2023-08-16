@@ -16,7 +16,7 @@ type chunk struct {
 	end      int
 }
 
-func fetchChunk(connection connection, chunk chunk, progress_channel chan int) (err error) {
+func fetchChunk(connection connection, chunk chunk, progress_channel chan progressMessage) (err error) {
 	req, err := http.NewRequest("GET", connection.url, nil)
 	req.Header.Add("Range", fmt.Sprintf("bytes=%d-%d", chunk.start, chunk.end))
 
@@ -26,9 +26,9 @@ func fetchChunk(connection connection, chunk chunk, progress_channel chan int) (
 		return errors.New(fmt.Sprintf("requested for %s failed: %s", connection.url, err.Error()))
 	}
 
-  if response.StatusCode < 200 || response.StatusCode >= 300 {
+	if response.StatusCode < 200 || response.StatusCode >= 300 {
 		return errors.New(fmt.Sprintf("requested for %s failed with code %v", connection.url, response.StatusCode))
-  }
+	}
 
 	defer response.Body.Close()
 
@@ -65,7 +65,7 @@ func initializeChunks(download_attributes attributes) (chunks []chunk) {
 	return chunks
 }
 
-func chunkWorker(connection connection, wait_group *sync.WaitGroup, progress_channel chan int, queue chan chunk) (err error) {
+func chunkWorker(connection connection, wait_group *sync.WaitGroup, progress_channel chan progressMessage, queue chan chunk) (err error) {
 	defer wait_group.Done()
 	for chunk := range queue {
 		err = fetchChunk(connection, chunk, progress_channel)

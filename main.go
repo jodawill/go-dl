@@ -91,7 +91,7 @@ func getDownloadProperties(urls []string) attributes {
 func fetchFile(chunks []chunk, download_attributes attributes) (err error) {
 	wait_group := sync.WaitGroup{}
 	progress_wait_group := sync.WaitGroup{}
-	progress_channel := make(chan int)
+	progress_channel := make(chan progressMessage)
 	queue := make(chan chunk)
 
 	for _, connection := range download_attributes.connections {
