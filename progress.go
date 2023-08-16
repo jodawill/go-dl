@@ -30,10 +30,7 @@ func writeProgressBar(total int, wait_group *sync.WaitGroup, progress_channel <-
 	for message := range progress_channel {
 		downloaded += message.bytes
 		if message.message != "" {
-			for i := 0; i < 1000; i++ {
-				fmt.Printf("\b")
-			}
-			fmt.Println("\033[2K" + message.message)
+			fmt.Println("\033[2K\r" + message.message)
 		}
 		fmt.Printf(fmt.Sprintf("\rDownloading... %.2f%%%%", 100*float64(downloaded)/float64(total)))
 	}
