@@ -1,6 +1,6 @@
 # Go-dl
 ## Introduction
-This is a command line tool for conducting multi-source downloads in Go.
+This is a command line tool for conducting multi-source downloads written in Go.
 
 ## Usage
 ```
