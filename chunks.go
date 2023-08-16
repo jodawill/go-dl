@@ -26,6 +26,10 @@ func fetchChunk(connection connection, chunk chunk, progress_channel chan int) (
 		return errors.New(fmt.Sprintf("requested for %s failed: %s", connection.url, err.Error()))
 	}
 
+  if response.StatusCode < 200 || response.StatusCode >= 300 {
+		return errors.New(fmt.Sprintf("requested for %s failed with code %v", connection.url, response.StatusCode))
+  }
+
 	defer response.Body.Close()
 
 	file, err := os.Create(chunk.filename)
