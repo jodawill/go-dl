@@ -177,7 +177,8 @@ func (progress_writer *progressWriter) Write(data []byte) (n int, err error) {
 	return
 }
 
-func writeProgressBar(total int, progress_channel <-chan int) {
+func writeProgressBar(total int, wait_group *sync.WaitGroup, progress_channel <-chan int) {
+	defer wait_group.Done()
 	var downloaded int
 	for bytes := range progress_channel {
 		downloaded += bytes
@@ -196,6 +197,7 @@ func chunkWorker(connection connection, wait_group *sync.WaitGroup, progress_cha
 
 func fetchFile(chunks []chunk, download_attributes attributes) (err error) {
 	wait_group := sync.WaitGroup{}
+	progress_wait_group := sync.WaitGroup{}
 	progress_channel := make(chan int)
 	queue := make(chan chunk)
 
@@ -204,7 +206,8 @@ func fetchFile(chunks []chunk, download_attributes attributes) (err error) {
 		go chunkWorker(download_attributes.connections[i], &wait_group, progress_channel, queue)
 	}
 
-	go writeProgressBar(download_attributes.size, progress_channel)
+	go writeProgressBar(download_attributes.size, &progress_wait_group, progress_channel)
+	progress_wait_group.Add(1)
 
 	for i := 0; i < len(chunks); i++ {
 		queue <- chunks[i]
@@ -213,6 +216,7 @@ func fetchFile(chunks []chunk, download_attributes attributes) (err error) {
 
 	wait_group.Wait()
 	close(progress_channel)
+	progress_wait_group.Wait()
 
 	return err
 }
