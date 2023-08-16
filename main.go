@@ -186,6 +186,6 @@ func main() {
 	if ok {
 		fmt.Println("Checksum passed. Download successful!")
 	} else {
-		fmt.Println(fmt.Sprintf("Download failed; checksums don't match"))
+		panic(fmt.Sprintf("Download failed; checksums don't match"))
 	}
 }
