@@ -36,8 +36,7 @@ func fetchChunk(connection connection, chunk chunk, progress_channel chan int) (
 	defer file.Close()
 
 	if err != nil {
-		fmt.Println(fmt.Sprintf("ERROR: Failed to create file %s", chunk.filename))
-		os.Exit(1)
+		panic(fmt.Sprintf("ERROR: Failed to create file %s", chunk.filename))
 	}
 
 	progress_writer := &progressWriter{
@@ -47,8 +46,7 @@ func fetchChunk(connection connection, chunk chunk, progress_channel chan int) (
 
 	_, err = io.Copy(progress_writer, response.Body)
 	if err != nil {
-		fmt.Println(fmt.Sprintf("ERROR: Failed to write to file %s: %s", chunk.filename, err.Error()))
-		os.Exit(1)
+		panic(fmt.Sprintf("ERROR: Failed to write to file %s: %s", chunk.filename, err.Error()))
 	}
 
 	return
