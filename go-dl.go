@@ -1,5 +1,3 @@
-// TODO: Use semaphores to limit the number of concurrent downloads
-// TODO: Allow retrying failed chunks
 package main
 
 import (
@@ -10,40 +8,18 @@ import (
   "fmt"
   "github.com/google/uuid"
   "io"
-  "os"
   "net/http"
+  "os"
+  "regexp"
   "strconv"
   "strings"
   "sync"
 )
 
-func downloadPart(connection connection, filename string, start int, end int) (err error) {
-  req, err := http.NewRequest("GET", connection.url, nil)
-  req.Header.Add("Range", fmt.Sprintf("bytes=%d-%d", start, end))
-
-  response, err := connection.client.Do(req)
-
-  if err != nil {
-    return errors.New(fmt.Sprintf("requested for %s failed: %s", connection.url, err.Error()))
-  }
-
-  defer response.Body.Close()
-
-  file, err := os.Create(filename)
-  defer file.Close()
-
-  if err != nil {
-    fmt.Println(fmt.Sprintf("ERROR: Failed to create file %s", filename))
-    os.Exit(1)
-  }
-
-  _, err = io.Copy(file, response.Body)
-  if err != nil {
-    fmt.Println(fmt.Sprintf("ERROR: Failed to write to file %s: %s", filename, err.Error()))
-    os.Exit(1)
-  }
-
-  return
+type attributes struct {
+  size int
+  connections []connection
+  checksum string
 }
 
 type connection struct {
@@ -51,10 +27,34 @@ type connection struct {
   url string
 }
 
-type attributes struct {
-  size int
-  connections []connection
-  checksum string
+func getFilePropertiesFromURL(url string) (size int, checksum string, client *http.Client, err error) {
+  client = &http.Client{}
+  req, err := http.NewRequest("HEAD", url, nil)
+
+  if err != nil {
+    return size, checksum, client, err
+  }
+  response, err := client.Do(req)
+  if err != nil {
+    return size, checksum, client, err
+  }
+  length_string := response.Header.Get("Content-Length")
+  size, _ = strconv.Atoi(length_string)
+  checksum = response.Header.Get("Etag")
+  if strings.HasPrefix(checksum, "W/") {
+    fmt.Println("ERROR: Checksum is a weak validator. Exiting because we cannot guarantee a consistent download.")
+    os.Exit(1)
+  }
+
+  checksum = strings.Trim(checksum, "\"")
+
+  re := regexp.MustCompile(`-\d+$`)
+  if re.MatchString(checksum) {
+    fmt.Println(fmt.Sprintf("WARNING: Multi-part Etag header detected. Ignoring checksum for %s", url))
+    checksum = ""
+  }
+
+  return size, checksum, client, err
 }
 
 func getDownloadProperties(urls []string) attributes {
@@ -88,50 +88,109 @@ func getDownloadProperties(urls []string) attributes {
   return download_attributes
 }
 
-func getFilePropertiesFromURL(url string) (size int, checksum string, client *http.Client, err error) {
-  client = &http.Client{}
-  req, err := http.NewRequest("HEAD", url, nil)
+type stringSliceFlag []string
 
-  if err != nil {
-    return size, checksum, client, err
-  }
-  response, err := client.Do(req)
-  if err != nil {
-    return size, checksum, client, err
-  }
-  length_string := response.Header.Get("Content-Length")
-  size, _ = strconv.Atoi(length_string)
-  checksum = response.Header.Get("Etag")
-  if strings.HasPrefix(checksum, "W/") {
-    fmt.Println("ERROR: Checksum is a weak validator. Exiting because we cannot guarantee a consistent download.")
-    os.Exit(1)
-  }
-  checksum = strings.Trim(checksum, "\"")
-  return size, checksum, client, err
+func (s *stringSliceFlag) String() string {
+  return fmt.Sprintf("%v", *s)
 }
 
-func mergeFiles(destination string, chunks []string) (err error) {
-  out_file, err := os.Create(destination)
+func (s *stringSliceFlag) Set(value string) error {
+  *s = append(*s, value)
+  return nil
+}
+
+type chunk struct {
+  connection connection
+  filename string
+  start int
+  end int
+}
+
+func fetchChunk(chunk chunk, wait_group *sync.WaitGroup, progress_channel chan int) (err error) {
+  defer wait_group.Done()
+  req, err := http.NewRequest("GET", chunk.connection.url, nil)
+  req.Header.Add("Range", fmt.Sprintf("bytes=%d-%d", chunk.start, chunk.end))
+
+  response, err := chunk.connection.client.Do(req)
+
   if err != nil {
-    return err
+    return errors.New(fmt.Sprintf("requested for %s failed: %s", chunk.connection.url, err.Error()))
   }
-  defer out_file.Close()
 
-  for _, source := range chunks {
-    in_file, err := os.Open(source)
-    if err != nil {
-      return err
-    }
-    defer in_file.Close()
+  defer response.Body.Close()
 
-    _, err = io.Copy(out_file, in_file)
-    if err != nil {
-      return err
-    }
-    in_file.Close()
+  file, err := os.Create(chunk.filename)
+  defer file.Close()
 
-    os.Remove(source)
+  if err != nil {
+    fmt.Println(fmt.Sprintf("ERROR: Failed to create file %s", chunk.filename))
+    os.Exit(1)
   }
+
+  progress_writer := &progressWriter{
+    file_writer: io.MultiWriter(file),
+    progress_channel: progress_channel,
+  }
+
+  _, err = io.Copy(progress_writer, response.Body)
+  if err != nil {
+    fmt.Println(fmt.Sprintf("ERROR: Failed to write to file %s: %s", chunk.filename, err.Error()))
+    os.Exit(1)
+  }
+
+  return
+}
+
+func initializeChunks(download_attributes attributes) (chunks []chunk) {
+  chunk_size := download_attributes.size/len(download_attributes.connections) + download_attributes.size%len(download_attributes.connections)
+  for i, connection := range download_attributes.connections {
+    chunk := chunk{
+      connection: connection,
+      filename: fmt.Sprintf("%s.part", uuid.New().String()),
+      start: i*chunk_size,
+      end: (i+1)*chunk_size-1,
+    }
+    chunks = append(chunks, chunk)
+  }
+
+  return chunks
+}
+
+type progressWriter struct {
+  file_writer io.Writer
+  progress_channel chan<- int
+}
+
+func (progress_writer *progressWriter) Write(data []byte) (n int, err error) {
+  n, err = progress_writer.file_writer.Write(data)
+  if err == nil {
+    progress_writer.progress_channel <- n
+  }
+  return
+}
+
+func writeProgressBar(total int, progress_channel <-chan int) {
+  var downloaded int
+  for bytes := range progress_channel {
+    downloaded += bytes
+    fmt.Printf(fmt.Sprintf("\rDownloading... %.2f%%%%", 100*float64(downloaded)/float64(total)))
+  }
+  fmt.Println()
+}
+
+func fetchFile(chunks []chunk, download_attributes attributes) (err error) {
+  wait_group := sync.WaitGroup{}
+  progress_channel := make(chan int)
+
+  go writeProgressBar(download_attributes.size, progress_channel)
+  for _, chunk := range chunks {
+    wait_group.Add(1)
+    go fetchChunk(chunk, &wait_group, progress_channel)
+  }
+
+  wait_group.Wait()
+  close(progress_channel)
+
   return err
 }
 
@@ -151,96 +210,71 @@ func checksumMatches(filename string, desired_checksum string) (ok bool, err err
   return sum == desired_checksum, nil
 }
 
-type stringSliceFlag []string
-
-func (s *stringSliceFlag) String() string {
-  return fmt.Sprintf("%v", *s)
-}
-
-func (s *stringSliceFlag) Set(value string) error {
-  *s = append(*s, value)
-  return nil
-}
-
-func printProgressBar(total int, progress_channel chan struct{}) {
-  var progress int
-  for range progress_channel {
-    fmt.Printf("\rProgress: %.2f%%", float64(progress) / float64(total))
-    progress++
-    if progress == total {
-      fmt.Println()
-    }
+func mergeFiles(destination string, chunks []chunk) (err error) {
+  out_file, err := os.Create(destination)
+  if err != nil {
+    return err
   }
+  defer out_file.Close()
+
+  for _, chunk := range chunks {
+    in_file, err := os.Open(chunk.filename)
+    if err != nil {
+      return err
+    }
+    defer in_file.Close()
+
+    _, err = io.Copy(out_file, in_file)
+    if err != nil {
+      return err
+    }
+    in_file.Close()
+
+    os.Remove(chunk.filename)
+  }
+  return err
 }
 
-func main() {
-  var destination string
-  var urls stringSliceFlag
-  var chunk_size int
+func displayFileInfo(download_attributes attributes) {
+  fmt.Println("=============== File Information ==============")
+  fmt.Println("File size:", download_attributes.size)
+  fmt.Println("Checksum:", download_attributes.checksum)
+  fmt.Println(fmt.Sprintf("Connections: %v", len(download_attributes.connections)))
+  fmt.Println("===============================================")
+}
 
+func parseParams() (urls stringSliceFlag, destination string) {
   flag.StringVar(&destination, "dest", "download.dat", "Destination filename")
-  flag.IntVar(&chunk_size, "chunk-size", 512*1024, "Size of download chunks in bytes")
   flag.Var(&urls, "url", "Add a source URL for the download")
   flag.Parse()
+
+  if len(os.Args) == 1 {
+    flag.Usage()
+    os.Exit(1)
+  }
 
   if len(urls) == 0 {
     fmt.Println("ERROR: No source URLs provided")
     os.Exit(1)
   }
 
+  return urls, destination
+}
+
+func main() {
+  urls, destination := parseParams()
   download_attributes := getDownloadProperties(urls)
+  displayFileInfo(download_attributes)
+  chunks := initializeChunks(download_attributes)
 
-  fmt.Println("File size:", download_attributes.size)
-  fmt.Println("Checksum:", download_attributes.checksum)
-  fmt.Println(fmt.Sprintf("%v connections established", len(download_attributes.connections)))
-
-  chunk_count := download_attributes.size/chunk_size
-  if download_attributes.size % chunk_size > 0 {
-    chunk_count++
+  err := fetchFile(chunks, download_attributes)
+  if err != nil {
+    fmt.Println(fmt.Sprintf("ERROR: Failed to fetch file: %s", err.Error()))
   }
-  chunks := make([]string, chunk_count)
 
-  wait_group := sync.WaitGroup{}
-  var mu sync.Mutex
-  progress_channel := make(chan struct{})
-
-  go printProgressBar(chunk_count, progress_channel)
-
-  for chunk := 0; chunk < chunk_count; chunk++ {
-    wait_group.Add(1)
-    go func(chunk int, chunks []string) {
-      connection := download_attributes.connections[chunk % len(download_attributes.connections)]
-      filename := fmt.Sprintf("%s.part", uuid.New().String())
-      err := downloadPart(
-        connection,
-        filename,
-        chunk*chunk_size,
-        (chunk+1)*chunk_size-1,
-      )
-
-      if err != nil {
-        fmt.Println(fmt.Sprintf("ERROR: Chunk %v failed on %s: %s", chunk+1, connection.url, err.Error()))
-        os.Exit(1)
-      }
-
-      mu.Lock()
-      chunks[chunk] = filename
-      mu.Unlock()
-      progress_channel <- struct{}{}
-      wait_group.Done()
-    }(chunk, chunks)
-  }
-  wait_group.Wait()
-  close(progress_channel)
-
-  err := mergeFiles(destination, chunks)
+  err = mergeFiles(destination, chunks)
   if err != nil {
     fmt.Println("ERROR: Failed to merge chunk files:", err)
-  }
-
-  if len(download_attributes.checksum) == 0 {
-    fmt.Println("Download complete. No checksum available.")
-    return
   }
 
   ok, err := checksumMatches(destination, download_attributes.checksum)
