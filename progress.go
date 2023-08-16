@@ -3,7 +3,6 @@ package main
 import (
 	"fmt"
 	"io"
-	"strings"
 	"sync"
 )
 
@@ -34,7 +33,7 @@ func writeProgressBar(total int, wait_group *sync.WaitGroup, progress_channel <-
 			for i := 0; i < 1000; i++ {
 				fmt.Printf("\b")
 			}
-			fmt.Println("\r" + message.message + strings.Repeat(" ", 21))
+			fmt.Println("\033[2K" + message.message)
 		}
 		fmt.Printf(fmt.Sprintf("\rDownloading... %.2f%%%%", 100*float64(downloaded)/float64(total)))
 	}
