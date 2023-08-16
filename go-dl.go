@@ -100,21 +100,19 @@ func (s *stringSliceFlag) Set(value string) error {
 }
 
 type chunk struct {
-  connection connection
   filename string
   start int
   end int
 }
 
-func fetchChunk(chunk chunk, wait_group *sync.WaitGroup, progress_channel chan int) (err error) {
-  defer wait_group.Done()
-  req, err := http.NewRequest("GET", chunk.connection.url, nil)
+func fetchChunk(connection connection, chunk chunk, progress_channel chan int) (err error) {
+  req, err := http.NewRequest("GET", connection.url, nil)
   req.Header.Add("Range", fmt.Sprintf("bytes=%d-%d", chunk.start, chunk.end))
 
-  response, err := chunk.connection.client.Do(req)
+  response, err := connection.client.Do(req)
 
   if err != nil {
-    return errors.New(fmt.Sprintf("requested for %s failed: %s", chunk.connection.url, err.Error()))
+    return errors.New(fmt.Sprintf("requested for %s failed: %s", connection.url, err.Error()))
   }
 
   defer response.Body.Close()
@@ -142,16 +140,26 @@ func fetchChunk(chunk chunk, wait_group *sync.WaitGroup, progress_channel chan i
 }
 
 func initializeChunks(download_attributes attributes) (chunks []chunk) {
-  chunk_size := download_attributes.size/len(download_attributes.connections) + download_attributes.size%len(download_attributes.connections)
-  for i, connection := range download_attributes.connections {
+  chunk_size := 512 * 1024
+  for i := 0; i*chunk_size < download_attributes.size; i++ {
     chunk := chunk{
-      connection: connection,
       filename: fmt.Sprintf("%s.part", uuid.New().String()),
       start: i*chunk_size,
       end: (i+1)*chunk_size-1,
     }
     chunks = append(chunks, chunk)
   }
+
+  //chunk_size := download_attributes.size/len(download_attributes.connections) + download_attributes.size%len(download_attributes.connections)
+  //for i, connection := range download_attributes.connections {
+  //  chunk := chunk{
+  //    connection: connection,
+  //    filename: fmt.Sprintf("%s.part", uuid.New().String()),
+  //    start: i*chunk_size,
+  //    end: (i+1)*chunk_size-1,
+  //  }
+  //  chunks = append(chunks, chunk)
+  //}
 
   return chunks
 }
@@ -178,15 +186,30 @@ func writeProgressBar(total int, progress_channel <-chan int) {
   fmt.Println()
 }
 
+func chunkWorker(connection connection, wait_group *sync.WaitGroup, progress_channel chan int, queue chan chunk) (err error) {
+  defer wait_group.Done()
+  for chunk := range queue {
+    err = fetchChunk(connection, chunk, progress_channel)
+  }
+  return err
+}
+
 func fetchFile(chunks []chunk, download_attributes attributes) (err error) {
   wait_group := sync.WaitGroup{}
   progress_channel := make(chan int)
+  queue := make(chan chunk)
+
+  for i := 0; i < len(download_attributes.connections); i++ {
+    wait_group.Add(1)
+    go chunkWorker(download_attributes.connections[i], &wait_group, progress_channel, queue)
+  }
 
   go writeProgressBar(download_attributes.size, progress_channel)
-  for _, chunk := range chunks {
-    wait_group.Add(1)
-    go fetchChunk(chunk, &wait_group, progress_channel)
+
+  for i := 0; i < len(chunks); i++ {
+    queue <- chunks[i]
   }
+  close(queue)
 
   wait_group.Wait()
   close(progress_channel)
@@ -222,7 +245,6 @@ func mergeFiles(destination string, chunks []chunk) (err error) {
     if err != nil {
       return err
     }
-    defer in_file.Close()
 
     _, err = io.Copy(out_file, in_file)
     if err != nil {
@@ -272,6 +294,7 @@ func main() {
     fmt.Println(fmt.Sprintf("ERROR: Failed to fetch file: %s", err.Error()))
   }
 
+  fmt.Println("Merging temporary files into", destination)
   err = mergeFiles(destination, chunks)
   if err != nil {
     fmt.Println("ERROR: Failed to merge chunk files:", err)
