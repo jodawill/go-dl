@@ -89,25 +89,26 @@ func getDownloadProperties(urls []string) attributes {
 }
 
 func fetchFile(chunks []chunk, download_attributes attributes) (err error) {
-	wait_group := sync.WaitGroup{}
 	progress_wait_group := sync.WaitGroup{}
 	progress_channel := make(chan progressMessage)
-	queue := make(chan chunk)
+	chunk_counter_channel := make(chan struct{})
+	queue := make(chan chunk, len(chunks))
+
+	for _, chunk := range chunks {
+		queue <- chunk
+	}
 
 	for _, connection := range download_attributes.connections {
-		wait_group.Add(1)
-		go chunkWorker(connection, &wait_group, progress_channel, queue)
+		go chunkWorker(connection, progress_channel, queue, chunk_counter_channel)
 	}
 
 	go writeProgressBar(download_attributes.size, &progress_wait_group, progress_channel)
 	progress_wait_group.Add(1)
 
-	for _, chunk := range chunks {
-		queue <- chunk
+	for i := 0; i < len(chunks); i++ {
+		<- chunk_counter_channel
 	}
-	close(queue)
 
-	wait_group.Wait()
 	close(progress_channel)
 	progress_wait_group.Wait()
 

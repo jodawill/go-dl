@@ -7,7 +7,7 @@ import (
 	"io"
 	"net/http"
 	"os"
-	"sync"
+	"time"
 )
 
 type chunk struct {
@@ -65,12 +65,20 @@ func initializeChunks(download_attributes attributes) (chunks []chunk) {
 	return chunks
 }
 
-func chunkWorker(connection connection, wait_group *sync.WaitGroup, progress_channel chan progressMessage, queue chan chunk) (err error) {
-	defer wait_group.Done()
+func chunkWorker(connection connection, progress_channel chan progressMessage, queue chan chunk, chunk_counter_channel chan struct{}) (err error) {
+  backoff := 1
 	for chunk := range queue {
 		err = fetchChunk(connection, chunk, progress_channel)
 		if err != nil {
-		  panic(fmt.Sprintf("ERROR: failed to download chunk: %s", err.Error()))
+			progress_channel <- progressMessage{message: fmt.Sprintf("WARNING: failed to download chunk: %s", err.Error())}
+			queue <- chunk
+			time.Sleep(time.Duration(backoff) * time.Second)
+			if backoff <= 32 {
+				backoff *= 2
+			}
+		} else {
+			chunk_counter_channel <- struct{}{}
+			backoff = 1
 		}
 	}
 	return err
