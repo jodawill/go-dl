@@ -7,10 +7,12 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"os/signal"
 	"regexp"
 	"strconv"
 	"strings"
 	"sync"
+	"syscall"
 )
 
 type attributes struct {
@@ -106,7 +108,7 @@ func fetchFile(chunks []chunk, download_attributes attributes) (err error) {
 	progress_wait_group.Add(1)
 
 	for i := 0; i < len(chunks); i++ {
-		<- chunk_counter_channel
+		<-chunk_counter_channel
 	}
 
 	close(progress_channel)
@@ -149,10 +151,14 @@ func mergeFiles(destination string, chunks []chunk) (err error) {
 			return err
 		}
 		in_file.Close()
-
-		os.Remove(chunk.filename)
 	}
 	return err
+}
+
+func removeChunkFiles(chunks []chunk) {
+	for _, chunk := range chunks {
+		os.Remove(chunk.filename)
+	}
 }
 
 func displayFileInfo(download_attributes attributes) {
@@ -168,6 +174,15 @@ func main() {
 	download_attributes := getDownloadProperties(urls)
 	displayFileInfo(download_attributes)
 	chunks := initializeChunks(download_attributes)
+
+	signal_channel := make(chan os.Signal, 1)
+	signal.Notify(signal_channel, os.Interrupt, syscall.SIGTERM)
+	go func() {
+		for range signal_channel {
+			removeChunkFiles(chunks)
+			os.Exit(0)
+		}
+	}()
 
 	err := fetchFile(chunks, download_attributes)
 	if err != nil {
@@ -189,4 +204,6 @@ func main() {
 	} else {
 		panic(fmt.Sprintf("Download failed; checksums don't match"))
 	}
+
+	removeChunkFiles(chunks)
 }
