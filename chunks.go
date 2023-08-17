@@ -66,7 +66,7 @@ func initializeChunks(download_attributes attributes) (chunks []chunk) {
 }
 
 func chunkWorker(connection connection, progress_channel chan progressMessage, queue chan chunk, chunk_counter_channel chan struct{}) (err error) {
-  backoff := 1
+	backoff := 1
 	for chunk := range queue {
 		err = fetchChunk(connection, chunk, progress_channel)
 		if err != nil {
