@@ -9,7 +9,7 @@ import (
 type progressMessage struct {
 	bytes     int
 	message   string
-	source_id  int
+	source_id int
 }
 
 type progressWriter struct {
@@ -27,8 +27,8 @@ func (progress_writer *progressWriter) Write(data []byte) (n int, err error) {
 }
 
 type source struct {
-  id          int
-	downloaded  int
+	id         int
+	downloaded int
 }
 
 func writeProgressBar(download_attributes attributes, total int, wait_group *sync.WaitGroup, progress_channel <-chan progressMessage) {
@@ -38,7 +38,7 @@ func writeProgressBar(download_attributes attributes, total int, wait_group *syn
 	sources := make([]source, len(download_attributes.connections))
 	for _, connection := range download_attributes.connections {
 		sources[connection.id] = source{
-			id: connection.id,
+			id:         connection.id,
 			downloaded: 0,
 		}
 	}
