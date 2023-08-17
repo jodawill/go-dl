@@ -24,6 +24,7 @@ type attributes struct {
 type connection struct {
 	client *http.Client
 	url    string
+	id     int
 }
 
 func parseEtag(etag string) (checksum string) {
@@ -61,7 +62,7 @@ func getFilePropertiesFromURL(url string) (size int, checksum string, client *ht
 
 func getDownloadProperties(urls []string) attributes {
 	download_attributes := attributes{}
-	for _, url := range urls {
+	for i, url := range urls {
 		size, checksum, client, err := getFilePropertiesFromURL(url)
 
 		if err != nil {
@@ -84,6 +85,7 @@ func getDownloadProperties(urls []string) attributes {
 		connection := connection{
 			client: client,
 			url:    url,
+			id:     i,
 		}
 		download_attributes.connections = append(download_attributes.connections, connection)
 	}
@@ -104,7 +106,7 @@ func fetchFile(chunks []chunk, download_attributes attributes) (err error) {
 		go chunkWorker(connection, progress_channel, queue, chunk_counter_channel)
 	}
 
-	go writeProgressBar(download_attributes.size, &progress_wait_group, progress_channel)
+	go writeProgressBar(download_attributes, download_attributes.size, &progress_wait_group, progress_channel)
 	progress_wait_group.Add(1)
 
 	for i := 0; i < len(chunks); i++ {
@@ -180,6 +182,7 @@ func main() {
 	go func() {
 		for range signal_channel {
 			removeChunkFiles(chunks)
+			fmt.Println()
 			os.Exit(0)
 		}
 	}()

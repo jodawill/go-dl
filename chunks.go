@@ -42,6 +42,7 @@ func fetchChunk(connection connection, chunk chunk, progress_channel chan progre
 	progress_writer := &progressWriter{
 		file_writer:      io.MultiWriter(file),
 		progress_channel: progress_channel,
+		source_id:        connection.id,
 	}
 
 	_, err = io.Copy(progress_writer, response.Body)
