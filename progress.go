@@ -75,12 +75,12 @@ func writeProgressBar(download_attributes attributes, total int, wait_group *syn
 
 		select {
 		case _ = <-reset_channel:
-			speed_bytes := (downloaded-last_bytes)/int((time.Now().UnixNano()-last_time.UnixNano())/1000000000)
+			speed_bytes := (downloaded - last_bytes) / int((time.Now().UnixNano()-last_time.UnixNano())/1000000000)
 			speed = formatBytes(speed_bytes) + "/s"
 			last_bytes = downloaded
 			last_time = time.Now()
 		default:
-			;
+
 		}
 
 		if message.message != "" {
