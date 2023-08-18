@@ -31,6 +31,19 @@ type source struct {
 	downloaded int
 }
 
+func formatBytes(bytes int) (output string) {
+	if bytes > 1073741824 {
+		return fmt.Sprintf("%.2f GiB", float64(bytes)/1073741824)
+	}
+	if bytes > 1048576 {
+		return fmt.Sprintf("%.2f MiB", float64(bytes)/1048576)
+	}
+	if bytes > 1024 {
+		return fmt.Sprintf("%.2f KiB", float64(bytes)/1024)
+	}
+	return fmt.Sprintf("%v bytes", bytes)
+}
+
 func writeProgressBar(download_attributes attributes, total int, wait_group *sync.WaitGroup, progress_channel <-chan progressMessage) {
 	defer wait_group.Done()
 	var downloaded int
@@ -51,10 +64,10 @@ func writeProgressBar(download_attributes attributes, total int, wait_group *syn
 			fmt.Println("\033[2K\r" + message.message)
 		}
 
-		fmt.Printf(fmt.Sprintf("\rDownloading... %.2f%%%%", 100*float64(downloaded)/float64(total)))
+		fmt.Printf(fmt.Sprintf("\033[2K\rDownloading... %.2f%%%%", 100*float64(downloaded)/float64(total)))
 
 		for id, source := range sources {
-			fmt.Printf(fmt.Sprintf(" | Source %v: %v bytes", id+1, source.downloaded))
+			fmt.Printf(fmt.Sprintf(" | Source %v: %s", id+1, formatBytes(source.downloaded)))
 		}
 	}
 	fmt.Println()
