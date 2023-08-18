@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"io"
 	"sync"
+	"time"
 )
 
 type progressMessage struct {
@@ -56,15 +57,37 @@ func writeProgressBar(download_attributes attributes, total int, wait_group *syn
 		}
 	}
 
+	reset_channel := make(chan struct{})
+	speed := "--"
+	var last_bytes int
+	last_time := time.Now()
+
+	go func() {
+		for {
+			time.Sleep(2 * time.Second)
+			reset_channel <- struct{}{}
+		}
+	}()
+
 	for message := range progress_channel {
 		downloaded += message.bytes
 		sources[message.source_id].downloaded += message.bytes
+
+		select {
+		case _ = <-reset_channel:
+			speed_bytes := (downloaded-last_bytes)/int((time.Now().UnixNano()-last_time.UnixNano())/1000000000)
+			speed = formatBytes(speed_bytes) + "/s"
+			last_bytes = downloaded
+			last_time = time.Now()
+		default:
+			;
+		}
 
 		if message.message != "" {
 			fmt.Println("\033[2K\r" + message.message)
 		}
 
-		fmt.Printf(fmt.Sprintf("\033[2K\rDownloading... %.2f%%%%", 100*float64(downloaded)/float64(total)))
+		fmt.Printf(fmt.Sprintf("\033[2K\rDownloading... %.2f%%%% | Speed: %s", 100*float64(downloaded)/float64(total), speed))
 
 		for id, source := range sources {
 			fmt.Printf(fmt.Sprintf(" | Source %v: %s", id+1, formatBytes(source.downloaded)))
