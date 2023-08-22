@@ -1,7 +1,6 @@
 package main
 
 import (
-	"errors"
 	"fmt"
 	"github.com/google/uuid"
 	"io"
@@ -23,11 +22,11 @@ func fetchChunk(connection connection, chunk chunk, progress_channel chan progre
 	response, err := connection.client.Do(req)
 
 	if err != nil {
-		return errors.New(fmt.Sprintf("requested for %s failed: %s", connection.url, err.Error()))
+		return fmt.Errorf("requested for %s failed: %s", connection.url, err.Error())
 	}
 
 	if response.StatusCode < 200 || response.StatusCode >= 300 {
-		return errors.New(fmt.Sprintf("requested for %s failed with code %v", connection.url, response.StatusCode))
+		return fmt.Errorf("requested for %s failed with code %v", connection.url, response.StatusCode)
 	}
 
 	defer response.Body.Close()
