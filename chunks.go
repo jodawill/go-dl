@@ -74,7 +74,7 @@ func chunkWorker(connection connection, progressChannel chan progressMessage, qu
 			queue <- chunk
 			time.Sleep(time.Duration(backoff) * time.Second)
 			if backoff <= 32 {
-				backoff *= 2
+				backoff <<= 1
 			}
 		} else {
 			chunkCounterChannel <- struct{}{}
