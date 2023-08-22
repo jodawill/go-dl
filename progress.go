@@ -8,8 +8,8 @@ import (
 )
 
 type progressMessage struct {
-	bytes     int
-	message   string
+	bytes    int
+	message  string
 	sourceID int
 }
 
