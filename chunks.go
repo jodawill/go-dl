@@ -15,7 +15,7 @@ type chunk struct {
 	end      int
 }
 
-func fetchChunk(connection connection, chunk chunk, progress_channel chan progressMessage) (err error) {
+func fetchChunk(connection connection, chunk chunk, progressChannel chan progressMessage) (err error) {
 	req, err := http.NewRequest("GET", connection.url, nil)
 	req.Header.Add("Range", fmt.Sprintf("bytes=%d-%d", chunk.start, chunk.end))
 
@@ -38,13 +38,13 @@ func fetchChunk(connection connection, chunk chunk, progress_channel chan progre
 		panic(fmt.Sprintf("ERROR: Failed to create file %s", chunk.filename))
 	}
 
-	progress_writer := &progressWriter{
-		file_writer:      io.MultiWriter(file),
-		progress_channel: progress_channel,
-		source_id:        connection.id,
+	progressWriter := &progressWriter{
+		fileWriter:      io.MultiWriter(file),
+		progressChannel: progressChannel,
+		sourceID:        connection.id,
 	}
 
-	_, err = io.Copy(progress_writer, response.Body)
+	_, err = io.Copy(progressWriter, response.Body)
 	if err != nil {
 		panic(fmt.Sprintf("ERROR: Failed to write to file %s: %s", chunk.filename, err.Error()))
 	}
@@ -52,32 +52,32 @@ func fetchChunk(connection connection, chunk chunk, progress_channel chan progre
 	return
 }
 
-func initializeChunks(download_attributes attributes) (chunks []chunk) {
-	chunk_size := 512 * 1024
-	for i := 0; i*chunk_size < download_attributes.size; i++ {
+func initializeChunks(downloadAttributes attributes) (chunks []chunk) {
+	chunkSize := 512 * 1024
+	for i := 0; i*chunkSize < downloadAttributes.size; i++ {
 		chunk := chunk{
 			filename: fmt.Sprintf("%s.part", uuid.New().String()),
-			start:    i * chunk_size,
-			end:      (i+1)*chunk_size - 1,
+			start:    i * chunkSize,
+			end:      (i+1)*chunkSize - 1,
 		}
 		chunks = append(chunks, chunk)
 	}
 	return chunks
 }
 
-func chunkWorker(connection connection, progress_channel chan progressMessage, queue chan chunk, chunk_counter_channel chan struct{}) (err error) {
+func chunkWorker(connection connection, progressChannel chan progressMessage, queue chan chunk, chunkCounterChannel chan struct{}) (err error) {
 	backoff := 1
 	for chunk := range queue {
-		err = fetchChunk(connection, chunk, progress_channel)
+		err = fetchChunk(connection, chunk, progressChannel)
 		if err != nil {
-			progress_channel <- progressMessage{message: fmt.Sprintf("WARNING: failed to download chunk: %s", err.Error())}
+			progressChannel <- progressMessage{message: fmt.Sprintf("WARNING: failed to download chunk: %s", err.Error())}
 			queue <- chunk
 			time.Sleep(time.Duration(backoff) * time.Second)
 			if backoff <= 32 {
 				backoff *= 2
 			}
 		} else {
-			chunk_counter_channel <- struct{}{}
+			chunkCounterChannel <- struct{}{}
 			backoff = 1
 		}
 	}

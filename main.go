@@ -53,15 +53,15 @@ func getFilePropertiesFromURL(url string) (size int, checksum string, client *ht
 	if err != nil {
 		return size, checksum, client, err
 	}
-	length_string := response.Header.Get("Content-Length")
-	size, _ = strconv.Atoi(length_string)
+	lengthString := response.Header.Get("Content-Length")
+	size, _ = strconv.Atoi(lengthString)
 	checksum = parseEtag(response.Header.Get("Etag"))
 
 	return size, checksum, client, err
 }
 
 func getDownloadProperties(urls []string) attributes {
-	download_attributes := attributes{}
+	downloadAttributes := attributes{}
 	for i, url := range urls {
 		size, checksum, client, err := getFilePropertiesFromURL(url)
 
@@ -70,56 +70,56 @@ func getDownloadProperties(urls []string) attributes {
 			continue
 		}
 
-		if download_attributes.checksum != "" && checksum != "" && checksum != download_attributes.checksum {
+		if downloadAttributes.checksum != "" && checksum != "" && checksum != downloadAttributes.checksum {
 			fmt.Println(fmt.Sprintf("WARNING: Checksum for %s does not match what was found on previous url. Ignoring this source.", url))
 			continue
 		}
 
-		if download_attributes.size != 0 && size != download_attributes.size {
-			fmt.Println(fmt.Sprintf("WARNING: Size for %s (%v) does not match what was found on previous url (%v). Ignoring this source.", url, size, download_attributes.size))
+		if downloadAttributes.size != 0 && size != downloadAttributes.size {
+			fmt.Println(fmt.Sprintf("WARNING: Size for %s (%v) does not match what was found on previous url (%v). Ignoring this source.", url, size, downloadAttributes.size))
 			continue
 		}
 
-		download_attributes.size = size
-		download_attributes.checksum = checksum
+		downloadAttributes.size = size
+		downloadAttributes.checksum = checksum
 		connection := connection{
 			client: client,
 			url:    url,
 			id:     i,
 		}
-		download_attributes.connections = append(download_attributes.connections, connection)
+		downloadAttributes.connections = append(downloadAttributes.connections, connection)
 	}
-	return download_attributes
+	return downloadAttributes
 }
 
-func fetchFile(chunks []chunk, download_attributes attributes) (err error) {
-	progress_wait_group := sync.WaitGroup{}
-	progress_channel := make(chan progressMessage)
-	chunk_counter_channel := make(chan struct{})
+func fetchFile(chunks []chunk, downloadAttributes attributes) (err error) {
+	progressWaitGroup := sync.WaitGroup{}
+	progressChannel := make(chan progressMessage)
+	chunkCounterChannel := make(chan struct{})
 	queue := make(chan chunk, len(chunks))
 
 	for _, chunk := range chunks {
 		queue <- chunk
 	}
 
-	for _, connection := range download_attributes.connections {
-		go chunkWorker(connection, progress_channel, queue, chunk_counter_channel)
+	for _, connection := range downloadAttributes.connections {
+		go chunkWorker(connection, progressChannel, queue, chunkCounterChannel)
 	}
 
-	go writeProgressBar(download_attributes, download_attributes.size, &progress_wait_group, progress_channel)
-	progress_wait_group.Add(1)
+	go writeProgressBar(downloadAttributes, downloadAttributes.size, &progressWaitGroup, progressChannel)
+	progressWaitGroup.Add(1)
 
 	for i := 0; i < len(chunks); i++ {
-		<-chunk_counter_channel
+		<-chunkCounterChannel
 	}
 
-	close(progress_channel)
-	progress_wait_group.Wait()
+	close(progressChannel)
+	progressWaitGroup.Wait()
 
 	return err
 }
 
-func checksumMatches(filename string, desired_checksum string) (ok bool, err error) {
+func checksumMatches(filename string, desiredChecksum string) (ok bool, err error) {
 	file, err := os.Open(filename)
 	if err != nil {
 		return false, err
@@ -132,27 +132,27 @@ func checksumMatches(filename string, desired_checksum string) (ok bool, err err
 		return false, err
 	}
 	sum := hex.EncodeToString(hash.Sum(nil))
-	return sum == desired_checksum, nil
+	return sum == desiredChecksum, nil
 }
 
 func mergeFiles(destination string, chunks []chunk) (err error) {
-	out_file, err := os.Create(destination)
+	outFile, err := os.Create(destination)
 	if err != nil {
 		return err
 	}
-	defer out_file.Close()
+	defer outFile.Close()
 
 	for _, chunk := range chunks {
-		in_file, err := os.Open(chunk.filename)
+		inFile, err := os.Open(chunk.filename)
 		if err != nil {
 			return err
 		}
 
-		_, err = io.Copy(out_file, in_file)
+		_, err = io.Copy(outFile, inFile)
 		if err != nil {
 			return err
 		}
-		in_file.Close()
+		inFile.Close()
 	}
 	return err
 }
@@ -163,31 +163,31 @@ func removeChunkFiles(chunks []chunk) {
 	}
 }
 
-func displayFileInfo(download_attributes attributes) {
+func displayFileInfo(downloadAttributes attributes) {
 	fmt.Println("=============== File Information ==============")
-	fmt.Println("File size:", download_attributes.size)
-	fmt.Println("Checksum:", download_attributes.checksum)
-	fmt.Println(fmt.Sprintf("Connections: %v", len(download_attributes.connections)))
+	fmt.Println("File size:", downloadAttributes.size)
+	fmt.Println("Checksum:", downloadAttributes.checksum)
+	fmt.Println(fmt.Sprintf("Connections: %v", len(downloadAttributes.connections)))
 	fmt.Println("===============================================")
 }
 
 func main() {
 	urls, destination := parseParams()
-	download_attributes := getDownloadProperties(urls)
-	displayFileInfo(download_attributes)
-	chunks := initializeChunks(download_attributes)
+	downloadAttributes := getDownloadProperties(urls)
+	displayFileInfo(downloadAttributes)
+	chunks := initializeChunks(downloadAttributes)
 
-	signal_channel := make(chan os.Signal, 1)
-	signal.Notify(signal_channel, os.Interrupt, syscall.SIGTERM)
+	signalChannel := make(chan os.Signal, 1)
+	signal.Notify(signalChannel, os.Interrupt, syscall.SIGTERM)
 	go func() {
-		for range signal_channel {
+		for range signalChannel {
 			removeChunkFiles(chunks)
 			fmt.Println()
 			os.Exit(0)
 		}
 	}()
 
-	err := fetchFile(chunks, download_attributes)
+	err := fetchFile(chunks, downloadAttributes)
 	if err != nil {
 		panic(fmt.Sprintf("ERROR: Failed to fetch file: %s", err.Error()))
 	}
@@ -198,7 +198,7 @@ func main() {
 		panic(fmt.Sprintf("ERROR: Failed to merge chunk files: %s", err.Error()))
 	}
 
-	ok, err := checksumMatches(destination, download_attributes.checksum)
+	ok, err := checksumMatches(destination, downloadAttributes.checksum)
 	if err != nil {
 		panic(fmt.Sprintf("ERROR: Failed to compare checksums: %s", err.Error()))
 	}

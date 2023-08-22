@@ -10,19 +10,19 @@ import (
 type progressMessage struct {
 	bytes     int
 	message   string
-	source_id int
+	sourceID int
 }
 
 type progressWriter struct {
-	file_writer      io.Writer
-	progress_channel chan<- progressMessage
-	source_id        int
+	fileWriter      io.Writer
+	progressChannel chan<- progressMessage
+	sourceID        int
 }
 
 func (progress_writer *progressWriter) Write(data []byte) (n int, err error) {
-	n, err = progress_writer.file_writer.Write(data)
+	n, err = progress_writer.fileWriter.Write(data)
 	if err == nil {
-		progress_writer.progress_channel <- progressMessage{bytes: n, source_id: progress_writer.source_id}
+		progress_writer.progressChannel <- progressMessage{bytes: n, sourceID: progress_writer.sourceID}
 	}
 	return
 }
@@ -45,40 +45,40 @@ func formatBytes(bytes int) (output string) {
 	return fmt.Sprintf("%v bytes", bytes)
 }
 
-func writeProgressBar(download_attributes attributes, total int, wait_group *sync.WaitGroup, progress_channel <-chan progressMessage) {
-	defer wait_group.Done()
+func writeProgressBar(downloadAttributes attributes, total int, waitGroup *sync.WaitGroup, progressChannel <-chan progressMessage) {
+	defer waitGroup.Done()
 	var downloaded int
 
-	sources := make([]source, len(download_attributes.connections))
-	for _, connection := range download_attributes.connections {
+	sources := make([]source, len(downloadAttributes.connections))
+	for _, connection := range downloadAttributes.connections {
 		sources[connection.id] = source{
 			id:         connection.id,
 			downloaded: 0,
 		}
 	}
 
-	reset_channel := make(chan struct{})
+	resetChannel := make(chan struct{})
 	speed := "--"
-	var last_bytes int
-	last_time := time.Now()
+	var lastBytes int
+	lastTime := time.Now()
 
 	go func() {
 		for {
 			time.Sleep(2 * time.Second)
-			reset_channel <- struct{}{}
+			resetChannel <- struct{}{}
 		}
 	}()
 
-	for message := range progress_channel {
+	for message := range progressChannel {
 		downloaded += message.bytes
-		sources[message.source_id].downloaded += message.bytes
+		sources[message.sourceID].downloaded += message.bytes
 
 		select {
-		case _ = <-reset_channel:
-			speed_bytes := (downloaded - last_bytes) / int((time.Now().UnixNano()-last_time.UnixNano())/1000000000)
-			speed = formatBytes(speed_bytes) + "/s"
-			last_bytes = downloaded
-			last_time = time.Now()
+		case _ = <-resetChannel:
+			speedBytes := (downloaded - lastBytes) / int((time.Now().UnixNano()-lastTime.UnixNano())/1000000000)
+			speed = formatBytes(speedBytes) + "/s"
+			lastBytes = downloaded
+			lastTime = time.Now()
 		default:
 
 		}
