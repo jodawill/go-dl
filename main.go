@@ -167,7 +167,11 @@ func removeChunkFiles(chunks []chunk) {
 func displayFileInfo(downloadAttributes attributes) {
 	fmt.Println("=============== File Information ==============")
 	fmt.Println("File size:", downloadAttributes.size)
-	fmt.Println("Checksum:", downloadAttributes.checksum)
+	if downloadAttributes.checksum != "" {
+		fmt.Println("Checksum:", downloadAttributes.checksum)
+	} else {
+		fmt.Println("Checksum: Unavailable")
+	}
 	fmt.Println(fmt.Sprintf("Connections: %v", len(downloadAttributes.connections)))
 	fmt.Println("===============================================")
 }
