@@ -51,8 +51,7 @@ func fetchChunk(connection connection, chunk chunk, progressChannel chan progres
 	return
 }
 
-func initializeChunks(downloadAttributes attributes) (chunks []chunk) {
-	chunkSize := 512 * 1024
+func initializeChunks(downloadAttributes attributes, chunkSize int) (chunks []chunk) {
 	for i := 0; i*chunkSize < downloadAttributes.size; i++ {
 		chunk := chunk{
 			filename: fmt.Sprintf("%s.part", uuid.New().String()),

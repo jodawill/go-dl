@@ -173,10 +173,10 @@ func displayFileInfo(downloadAttributes attributes) {
 }
 
 func main() {
-	urls, destination := parseParams()
+	urls, destination, chunkSize := parseParams()
 	downloadAttributes := getDownloadProperties(urls)
 	displayFileInfo(downloadAttributes)
-	chunks := initializeChunks(downloadAttributes)
+	chunks := initializeChunks(downloadAttributes, chunkSize)
 	defer removeChunkFiles(chunks)
 
 	signalChannel := make(chan os.Signal, 1)

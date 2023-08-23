@@ -17,9 +17,10 @@ func (s *stringSliceFlag) Set(value string) error {
 	return nil
 }
 
-func parseParams() (urls stringSliceFlag, destination string) {
+func parseParams() (urls stringSliceFlag, destination string, chunkSize int) {
 	flag.StringVar(&destination, "dest", "download.dat", "Destination filename")
 	flag.Var(&urls, "url", "Add a source URL for the download")
+	flag.IntVar(&chunkSize, "chunk-size", 512*1024, "Chunk size in bytes")
 	flag.Parse()
 
 	if len(os.Args) == 1 {
@@ -32,5 +33,5 @@ func parseParams() (urls stringSliceFlag, destination string) {
 		os.Exit(1)
 	}
 
-	return urls, destination
+	return urls, destination, chunkSize
 }
