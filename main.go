@@ -97,6 +97,7 @@ func fetchFile(chunks []chunk, downloadAttributes attributes) (err error) {
 	progressChannel := make(chan progressMessage)
 	chunkCounterChannel := make(chan struct{})
 	queue := make(chan chunk, len(chunks))
+	defer close(queue)
 
 	for _, chunk := range chunks {
 		queue <- chunk
