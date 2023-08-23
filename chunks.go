@@ -32,11 +32,10 @@ func fetchChunk(connection connection, chunk chunk, progressChannel chan progres
 	defer response.Body.Close()
 
 	file, err := os.Create(chunk.filename)
-	defer file.Close()
-
 	if err != nil {
 		panic(fmt.Sprintf("ERROR: Failed to create file %s", chunk.filename))
 	}
+	defer file.Close()
 
 	progressWriter := &progressWriter{
 		fileWriter:      io.MultiWriter(file),
