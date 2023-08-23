@@ -19,10 +19,10 @@ type progressWriter struct {
 	sourceID        int
 }
 
-func (progress_writer *progressWriter) Write(data []byte) (n int, err error) {
-	n, err = progress_writer.fileWriter.Write(data)
+func (progressWriter *progressWriter) Write(data []byte) (n int, err error) {
+	n, err = progressWriter.fileWriter.Write(data)
 	if err == nil {
-		progress_writer.progressChannel <- progressMessage{bytes: n, sourceID: progress_writer.sourceID}
+		progressWriter.progressChannel <- progressMessage{bytes: n, sourceID: progressWriter.sourceID}
 	}
 	return
 }
