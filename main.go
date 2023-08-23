@@ -177,6 +177,7 @@ func main() {
 	downloadAttributes := getDownloadProperties(urls)
 	displayFileInfo(downloadAttributes)
 	chunks := initializeChunks(downloadAttributes)
+	defer removeChunkFiles(chunks)
 
 	signalChannel := make(chan os.Signal, 1)
 	signal.Notify(signalChannel, os.Interrupt, syscall.SIGTERM)
@@ -199,6 +200,11 @@ func main() {
 		panic(fmt.Sprintf("ERROR: Failed to merge chunk files: %s", err.Error()))
 	}
 
+	if downloadAttributes.checksum == "" {
+		fmt.Println("No checksum available. Assuming a successful download.")
+		return
+	}
+
 	ok, err := checksumMatches(destination, downloadAttributes.checksum)
 	if err != nil {
 		panic(fmt.Sprintf("ERROR: Failed to compare checksums: %s", err.Error()))
@@ -208,6 +214,4 @@ func main() {
 	} else {
 		panic(fmt.Sprintf("Download failed; checksums don't match"))
 	}
-
-	removeChunkFiles(chunks)
 }
