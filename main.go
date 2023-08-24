@@ -3,6 +3,7 @@ package main
 import (
 	"crypto/md5"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -45,23 +46,26 @@ func parseEtag(etag string) (checksum string) {
 func getFilePropertiesFromURL(url string) (size int, checksum string, client *http.Client, err error) {
 	client = &http.Client{}
 	req, err := http.NewRequest("HEAD", url, nil)
-
 	if err != nil {
 		return size, checksum, client, err
 	}
+
 	response, err := client.Do(req)
 	if err != nil {
 		return size, checksum, client, err
 	}
 	lengthString := response.Header.Get("Content-Length")
-	size, _ = strconv.Atoi(lengthString)
+	size, err = strconv.Atoi(lengthString)
+	if err != nil {
+		err = fmt.Errorf("failed to convert Content-Length header to integer: %s", err.Error())
+		return
+	}
 	checksum = parseEtag(response.Header.Get("Etag"))
 
 	return size, checksum, client, err
 }
 
-func getDownloadProperties(urls []string) attributes {
-	downloadAttributes := attributes{}
+func getDownloadProperties(urls []string) (downloadAttributes attributes, err error) {
 	for i, url := range urls {
 		size, checksum, client, err := getFilePropertiesFromURL(url)
 
@@ -89,7 +93,11 @@ func getDownloadProperties(urls []string) attributes {
 		}
 		downloadAttributes.connections = append(downloadAttributes.connections, connection)
 	}
-	return downloadAttributes
+	if len(downloadAttributes.connections) == 0 {
+		err = errors.New("No suitable connections found")
+		return downloadAttributes, err
+	}
+	return downloadAttributes, err
 }
 
 func fetchFile(chunks []chunk, downloadAttributes attributes) (err error) {
@@ -178,7 +186,11 @@ func displayFileInfo(downloadAttributes attributes) {
 
 func main() {
 	urls, destination, chunkSize := parseParams()
-	downloadAttributes := getDownloadProperties(urls)
+	downloadAttributes, err := getDownloadProperties(urls)
+	if err != nil {
+		panic(fmt.Sprintf("ERROR: Could not get download properties: %s", err))
+	}
+
 	displayFileInfo(downloadAttributes)
 	chunks := initializeChunks(downloadAttributes, chunkSize)
 	defer removeChunkFiles(chunks)
@@ -193,7 +205,7 @@ func main() {
 		}
 	}()
 
-	err := fetchFile(chunks, downloadAttributes)
+	err = fetchFile(chunks, downloadAttributes)
 	if err != nil {
 		panic(fmt.Sprintf("ERROR: Failed to fetch file: %s", err.Error()))
 	}
